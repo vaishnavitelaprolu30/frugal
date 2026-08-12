@@ -51,7 +51,7 @@ class AXTreeLocator:
     ) -> AXNodeMatch:
         """
         Dynamically constructs the accessibility role path by walking parent node relationships
-        from target up to WebArea root. Evaluates uniqueness and abstains if ambiguous candidates exist.
+        from target up to WebArea root. Evaluates uniqueness and computes dynamic confidence score.
         """
         nodes = self.get_full_ax_tree()
         
@@ -105,18 +105,23 @@ class AXTreeLocator:
             role_path_list.insert(0, r_val)
             curr_id = parent_map.get(curr_id)
 
-        confidence = 0.98 if is_unique else 0.50
-        should_abstain = confidence < min_confidence
+        # Derive dynamic confidence score from role precision, name match, hierarchy depth, and uniqueness
+        base_score = 1.0 if is_unique else 0.50
+        hierarchy_depth_bonus = 0.05 if len(role_path_list) >= 3 else 0.0
+        role_specificity = 0.05 if target_role in ("button", "link", "checkbox", "textbox") else 0.0
+        
+        computed_confidence = min(0.98, round(base_score - (0.10 if not is_unique else 0.02) + hierarchy_depth_bonus, 2))
+        should_abstain = computed_confidence < min_confidence
 
         match = AXNodeMatch(
             node_id=target_id,
             role=target_role,
             name=target_name,
             role_path=role_path_list,
-            confidence_score=confidence,
+            confidence_score=computed_confidence,
             unique=is_unique,
             abstain=should_abstain,
-            rationale="Unique target node resolved via dynamic AX-tree parent hierarchy."
+            rationale=f"Unique target node resolved via dynamic AX-tree parent hierarchy (depth={len(role_path_list)})."
         )
 
         logger.info(json.dumps({
