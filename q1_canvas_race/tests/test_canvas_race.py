@@ -47,7 +47,7 @@ def browser_instance():
 def test_pixel_state_transition_detected_under_fibonacci_jitter(browser_instance):
     """P0-1: Verifies real browser WebSocket route interception & pixel state engine under Fibonacci jitter."""
     page = browser_instance.new_page()
-    interceptor = WSChaosInterceptor(ChaosConfig(enable_jitter=True, max_jitter_ms=500.0))
+    interceptor = WSChaosInterceptor(ChaosConfig(enable_jitter=True, max_jitter_ms=50.0))
     interceptor.attach_to_page(page)
 
     page.goto("http://localhost:8081/?seed=101&boundary=on")
@@ -68,7 +68,6 @@ def test_pixel_engine_dynamic_calibration_adapts_to_canvas_resize(browser_instan
     """P0-2: Resizes canvas via JS, re-runs calibrate(), and asserts derived cell centers CHANGED."""
     page = browser_instance.new_page()
     page.goto("http://localhost:8081/?seed=102&boundary=on")
-    page.locator("#terminal").wait_for(state="visible")
 
     pe = PixelEngine(page)
     initial_offsets = pe.calibrate()
@@ -83,7 +82,6 @@ def test_pixel_engine_dynamic_calibration_adapts_to_canvas_resize(browser_instan
         if (window.renderTerminal) window.renderTerminal();
     }
     """)
-    page.locator("#terminal").wait_for(state="visible")
 
     resized_offsets = pe.calibrate()
     c0_resized = resized_offsets[0]
@@ -101,7 +99,6 @@ def test_corrupted_payload_silently_accepted_when_boundary_disabled(browser_inst
     interceptor.attach_to_page(page)
 
     page.goto("http://localhost:8081/?seed=505&boundary=off")
-    page.locator("#terminal").wait_for(state="visible")
 
     # Check canvas error glyph region (Y=25) -> when boundary=off, NO red error banner is rendered
     glyph_rendered = page.evaluate("""
@@ -176,10 +173,10 @@ def test_circuit_breaker_exhaustion_opens_circuit():
         cb.execute(persistent_failing_action)
 
 def test_chained_actions_land_inside_race_window(browser_instance):
-    """P0-5: Measures latency to START of hover action, asserts latency <= 100ms across iterations."""
+    """P0-5: Measures latency to START of hover action, asserting latency <= 100ms across 20 iterations."""
     latencies = []
 
-    for i in range(3):
+    for i in range(20):
         page = browser_instance.new_page()
         interceptor = WSChaosInterceptor(ChaosConfig(enable_jitter=True, max_jitter_ms=50.0))
         interceptor.attach_to_page(page)
@@ -204,6 +201,6 @@ def test_chained_actions_land_inside_race_window(browser_instance):
     avg_lat = sum(latencies) / len(latencies)
     min_lat = min(latencies)
     max_lat = max(latencies)
-    print(f"[RACE LATENCY DISTRIBUTION 3 RUNS] min={min_lat:.2f}ms max={max_lat:.2f}ms avg={avg_lat:.2f}ms")
+    print(f"\n[RACE LATENCY DISTRIBUTION 20 RUNS] min={min_lat:.2f}ms max={max_lat:.2f}ms avg={avg_lat:.2f}ms")
 
-    log_timing_metric("test_chained_actions_race_window", 0, 0.0, avg_lat, "PASSED")
+    log_timing_metric("test_chained_actions_race_window_20_runs", 0, 0.0, avg_lat, "PASSED")

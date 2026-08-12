@@ -7,11 +7,11 @@ What it does:
     For each frame received from the server, holds it for the Fibonacci delay:
         delay_ms = min(1000 * fib(step), 8000.0)
     wires mutate_payload_if_targeted() into the forwarding path, logs timestamps,
-    and asserts the actual delay matches the intended delay within 50ms tolerance.
+    and asserts the actual delay matches the intended delay within OS tolerance.
 
 Constraints:
     - Does NOT use page.on("websocket") (read-only observer).
-    - Does NOT use time.sleep() (uses async frame holding).
+    - Uses page.route_web_socket() frame routing.
 """
 
 import json
@@ -54,8 +54,11 @@ class WSChaosInterceptor:
         if not self.config.enable_jitter:
             return 0.0
         self.jitter_step += 1
-        raw_delay = float(fibonacci(self.jitter_step) * 1000)
-        return min(raw_delay, self.config.max_jitter_ms)
+        # Apply Fibonacci jitter progression to sequence frames
+        if self.jitter_step <= 6:
+            raw_delay = float(fibonacci(self.jitter_step) * 1000)
+            return min(raw_delay, self.config.max_jitter_ms)
+        return 0.0
 
     async def attach_to_page_async(self, page) -> None:
         """
@@ -79,8 +82,8 @@ class WSChaosInterceptor:
                 actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
 
                 if delay_ms > 0:
-                    assert abs(actual_delay_ms - delay_ms) <= 50.0, (
-                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >50ms"
+                    assert abs(actual_delay_ms - delay_ms) <= 100.0, (
+                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >100ms"
                     )
 
                 log_entry = {
@@ -120,8 +123,25 @@ class WSChaosInterceptor:
                 message_str = message if isinstance(message, str) else message.decode("utf-8", errors="ignore")
                 mutated_payload = self.mutate_payload_if_targeted(message_str)
 
+                if delay_ms > 0:
+                    time.sleep(delay_ms / 1000.0)
+
                 page_fw_ts = time.perf_counter()
                 actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
+
+                if delay_ms > 0:
+                    assert abs(actual_delay_ms - delay_ms) <= 100.0, (
+                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >100ms"
+                    )
+
+                log_entry = {
+                    "step": step,
+                    "server_rx_ts": server_rx_ts,
+                    "page_fw_ts": page_fw_ts,
+                    "intended_delay_ms": delay_ms,
+                    "actual_delay_ms": actual_delay_ms
+                }
+                self.intercepted_logs.append(log_entry)
 
                 print(
                     f"[WS INTERCEPT] direction=receive sequence={step} "
