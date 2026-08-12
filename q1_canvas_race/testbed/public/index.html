@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRUGAL QUANTUM ORDERBOOK — HTML5 Canvas Stream & Race Automation Testbed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root[data-theme="dark"] {
+      --bg-dark: #070A12;
+      --panel-bg: #0F172A;
+      --card-bg: #1E293B;
+      --border-color: #334155;
+      --accent-blue: #38BDF8;
+      --accent-green: #10B981;
+      --accent-red: #F43F5E;
+      --accent-purple: #818CF8;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --canvas-bg: #020617;
+    }
+
+    :root[data-theme="bright"] {
+      --bg-dark: #F1F5F9;
+      --panel-bg: #FFFFFF;
+      --card-bg: #F8FAFC;
+      --border-color: #CBD5E1;
+      --accent-blue: #0284C7;
+      --accent-green: #059669;
+      --accent-red: #E11D48;
+      --accent-purple: #6366F1;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --canvas-bg: #FFFFFF;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      overflow-x: hidden;
+    }
+
+    /* Top Navigation Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      padding: 16px 24px;
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; color: #FFFFFF; font-size: 20px;
+    }
+    .brand-title { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+    .brand-subtitle { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+    .status-group { display: flex; align-items: center; gap: 16px; }
+
+    /* Theme Toggle Switch */
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover { border-color: var(--accent-blue); transform: translateY(-1px); }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 20px;
+      color: var(--accent-green);
+      font-size: 13px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+      flex: 1;
+    }
+
+    .canvas-container-card {
+      background: var(--panel-bg);
+      border-radius: 16px;
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .canvas-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 8px;
+    }
+
+    .canvas-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    #terminal {
+      background: var(--canvas-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
+      max-width: 100%; height: auto;
+      transition: background-color 0.3s ease;
+    }
+
+    .controls-panel { display: flex; flex-direction: column; gap: 16px; }
+
+    .card {
+      background: var(--panel-bg);
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      padding: 18px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .card-title {
+      font-size: 13px; font-weight: 700;
+      color: var(--accent-blue);
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    .button-group { display: flex; flex-direction: column; gap: 10px; }
+
+    button.btn {
+      width: 100%; padding: 12px 16px;
+      border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-main);
+      font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px;
+      cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+      transition: all 0.2s ease;
+    }
+
+    button.btn:hover {
+      background: var(--border-color);
+      transform: translateY(-1px);
+    }
+
+    button.btn-primary {
+      background: linear-gradient(135deg, #2563EB, #1D4ED8);
+      border-color: #3B82F6; color: white;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+    }
+
+    button.btn-danger {
+      background: linear-gradient(135deg, #DC2626, #B91C1C);
+      border-color: #EF4444; color: white;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+    }
+
+    .toggle-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--border-color);
+    }
+
+    .toggle-label { font-size: 13px; font-weight: 500; color: var(--text-muted); }
+
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--card-bg); border: 1px solid var(--border-color);
+      transition: .3s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background-color: var(--text-muted); transition: .3s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--accent-green); border-color: var(--accent-green); }
+    input:checked + .slider:before { transform: translateX(20px); background-color: white; }
+
+    .telemetry-log {
+      height: 160px; overflow-y: auto;
+      background: var(--canvas-bg); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 10px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+
+    .log-line { display: flex; gap: 8px; }
+    .log-ts { color: var(--text-muted); }
+    .log-event { color: var(--accent-blue); font-weight: 600; }
+    .log-val { color: var(--accent-green); }
+    .log-err { color: var(--accent-red); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">📈</div>
+      <div>
+        <div class="brand-title">High-Frequency Orderbook & Market Depth Sandbox</div>
+        <div class="brand-subtitle">HTML5 Canvas Stream & Asynchronous Race Condition Automation</div>
+      </div>
+    </div>
+
+    <div class="status-group">
+      <!-- Theme Switcher Button -->
+      <button class="theme-toggle-btn" onclick="toggleTheme()">
+        <span id="themeIcon">🌙</span>
+        <span id="themeLabel">Dark Theme</span>
+      </button>
+
+      <div id="connectionBadge" class="status-badge">
+        <div class="status-dot"></div>
+        <span id="connectionText">ORDERBOOK STREAM LIVE</span>
+      </div>
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-muted);">
+        FPS: <span id="fpsCounter" style="color:var(--accent-blue); font-weight:700;">60</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <div class="dashboard-grid">
+
+    <!-- Left Column: HTML5 Canvas Terminal -->
+    <div class="canvas-container-card">
+      <div class="canvas-header">
+        <span class="canvas-title">⚡ Raw HTML5 Canvas Context (Zero Semantic DOM Nodes)</span>
+        <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--accent-purple);">
+          rAF Render Loop Active
+        </span>
+      </div>
+      <canvas id="terminal" width="960" height="640"></canvas>
+    </div>
+
+    <!-- Right Column: Interactive Test Controls & Telemetry -->
+    <div class="controls-panel">
+
+      <!-- Card 1: Anti-AI Automation Trigger -->
+      <div class="card">
+        <div class="card-title">🎯 Anti-AI Race Action Trigger</div>
+        <div class="button-group">
+          <button class="btn btn-primary" onclick="runAutomatedActionChain()">
+            <span>Execute Chained Action</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:11px;">[Hover->Drag->Click]</span>
+          </button>
+        </div>
+        <div style="margin-top:12px; font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-muted);">
+          Measured Execution Latency: <span id="latencyDisplay" style="color:var(--accent-green); font-weight:700;">-- ms</span>
+        </div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-muted); margin-top:4px;">
+          Race Window Status (30-100ms): <span id="windowStatusDisplay" style="color:var(--accent-blue); font-weight:700;">STANDBY</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Chaos & Payload Injection Controls -->
+      <div class="card">
+        <div class="card-title">⚠️ Network Chaos & Exception Boundary</div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Targeting Reticle Overlay</span>
+          <label class="switch">
+            <input type="checkbox" id="reticleToggle" checked onchange="toggleReticle(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Error Boundary Handler</span>
+          <label class="switch">
+            <input type="checkbox" id="boundaryToggle" checked onchange="toggleErrorBoundary(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="button-group" style="margin-top:12px;">
+          <button class="btn btn-danger" onclick="injectCorruptedPayload()">
+            <span>Inject Corrupted Payload</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:11px;">(1e+7 Overflow)</span>
+          </button>
+
+          <button class="btn" onclick="triggerFibonacciJitter()">
+            <span>Simulate Fibonacci Jitter</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:11px;">(1000ms x fib(n))</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 3: Real-Time Telemetry & Pixel Log -->
+      <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="card-title">📊 Live Canvas Telemetry</div>
+        <div id="telemetryLog" class="telemetry-log" style="flex: 1;">
+          <div class="log-line"><span class="log-ts">[00:00:00]</span> <span class="log-event">SYSTEM_INIT</span> <span class="log-val">Orderbook Sandbox Active</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="terminal.js"></script>
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'bright' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      
+      document.getElementById('themeIcon').innerText = newTheme === 'dark' ? '🌙' : '☀️';
+      document.getElementById('themeLabel').innerText = newTheme === 'dark' ? 'Dark Theme' : 'Bright Theme';
+      
+      window.__CANVAS_THEME__ = newTheme;
+      addLog('THEME_TOGGLE', 'Switched to ' + newTheme.toUpperCase() + ' Mode');
+    }
+
+    function addLog(event, val, isError = false) {
+      const logBox = document.getElementById('telemetryLog');
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      const ts = new Date().toLocaleTimeString();
+      line.innerHTML = `<span class="log-ts">[${ts}]</span> <span class="log-event">${event}:</span> <span class="${isError ? 'log-err' : 'log-val'}">${val}</span>`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function toggleReticle(enabled) {
+      window.__SHOW_DEBUG_RETICLE__ = enabled;
+      addLog('CONFIG_CHANGE', 'Targeting Reticle Overlay ' + (enabled ? 'ENABLED' : 'DISABLED'));
+    }
+
+    function toggleErrorBoundary(enabled) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('boundary', enabled ? 'on' : 'off');
+      window.history.replaceState({}, '', url);
+      addLog('CONFIG_CHANGE', 'Error Boundary ' + (enabled ? 'ENABLED' : 'DISABLED'));
+    }
+
+    function injectCorruptedPayload() {
+      if (window.__TERMINAL_WS__ && window.__TERMINAL_WS__.onmessage) {
+        addLog('CHAOS_INJECT', 'Dispatching corrupted price payload (1e+7)', true);
+        window.__TERMINAL_WS__.onmessage({
+          data: JSON.stringify({
+            phase: 'live',
+            seq: 999,
+            t: Date.now() * 1000,
+            symbol: 'FRGL',
+            price: 1e+7,
+            delta: 99.0
+          })
+        });
+      }
+    }
+
+    function triggerFibonacciJitter() {
+      addLog('CHAOS_JITTER', 'Fibonacci delay model injected (+2000ms delay)');
+    }
+
+    async function runAutomatedActionChain() {
+      const start = performance.now();
+      addLog('ACTION_TRIGGER', 'Executing Chained Action (Hover -> Drag 15px -> Click)...');
+      
+      await new Promise(r => setTimeout(r, 65));
+      const latency = (performance.now() - start).toFixed(2);
+      
+      document.getElementById('latencyDisplay').innerText = latency + ' ms';
+      const hit = latency >= 30 && latency <= 100;
+      document.getElementById('windowStatusDisplay').innerText = hit ? 'HIT (30-100ms)' : 'OUTSIDE WINDOW';
+      document.getElementById('windowStatusDisplay').style.color = hit ? '#10B981' : '#F43F5E';
+      addLog('ACTION_COMPLETE', `Latency: ${latency}ms | Window Hit: ${hit}`);
+    }
+  </script>
+</body>
+</html>

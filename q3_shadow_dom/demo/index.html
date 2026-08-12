@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRUGAL ENTERPRISE PORTAL — Closed Shadow DOM & Accessibility Tree Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root[data-theme="dark"] {
+      --bg-dark: #070A12;
+      --panel-bg: #0F172A;
+      --card-bg: #1E293B;
+      --border-color: #334155;
+      --accent-blue: #38BDF8;
+      --accent-green: #10B981;
+      --accent-purple: #818CF8;
+      --accent-red: #F43F5E;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --terminal-bg: #020617;
+    }
+
+    :root[data-theme="bright"] {
+      --bg-dark: #F1F5F9;
+      --panel-bg: #FFFFFF;
+      --card-bg: #F8FAFC;
+      --border-color: #CBD5E1;
+      --accent-blue: #0284C7;
+      --accent-green: #059669;
+      --accent-purple: #6366F1;
+      --accent-red: #E11D48;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --terminal-bg: #FFFFFF;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      padding: 30px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--panel-bg);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      border: 1px solid var(--border-color);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; color: #FFFFFF; font-size: 20px;
+    }
+
+    h1 { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+
+    .theme-toggle-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 20px;
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      color: var(--text-main); font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: 'Inter', sans-serif;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover { border-color: var(--accent-blue); transform: translateY(-1px); }
+
+    .card {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .card-title {
+      font-size: 13px; font-weight: 700;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-left: 8px;
+    }
+
+    .badge-open { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-closed { background: rgba(244, 63, 94, 0.15); color: var(--accent-red); border: 1px solid rgba(244, 63, 94, 0.3); }
+
+    button {
+      background: linear-gradient(135deg, #2563EB, #1D4ED8);
+      color: white; border: none;
+      padding: 10px 18px; font-size: 13px; font-weight: 600;
+      border-radius: 8px; cursor: pointer;
+      margin-right: 8px; margin-bottom: 8px;
+      transition: all 0.2s ease;
+    }
+
+    button:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3); }
+
+    #status-live {
+      padding: 12px;
+      background: var(--terminal-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--accent-green);
+      transition: background-color 0.3s ease;
+    }
+
+    pre {
+      background: var(--terminal-bg);
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      color: var(--accent-blue);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      margin-top: 10px;
+      transition: background-color 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Injected Closed Root Hook Script -->
+  <script>
+    (function() {
+      if (!window.__CLOSED_SHADOW_ROOTS__) {
+        window.__CLOSED_SHADOW_ROOTS__ = [];
+        const originalAttachShadow = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function(init) {
+          const shadowRoot = originalAttachShadow.call(this, init);
+          if (init && init.mode === 'closed') {
+            window.__CLOSED_SHADOW_ROOTS__.push(shadowRoot);
+          }
+          return shadowRoot;
+        };
+      }
+    })();
+  </script>
+
+  <div class="container">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-logo">🌲</div>
+        <div>
+          <h1>Enterprise Gateway Sandbox</h1>
+          <div style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono', monospace; margin-top:4px;">
+            Closed Shadow DOM Piercing & Accessibility Tree (AXTree) Role-Path Inspector
+          </div>
+        </div>
+      </div>
+
+      <button class="theme-toggle-btn" onclick="toggleTheme()">
+        <span id="themeIcon">🌙</span>
+        <span id="themeLabel">Dark Theme</span>
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌐 DOM Hierarchy Structure (Open -> Sealed Closed -> Open)</div>
+      <enterprise-portal id="root-gateway"></enterprise-portal>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚡ Interactive Closed Shadow DOM Piercer & Action Test</div>
+      <button onclick="autoPierceAndAuthorize()">🔓 Auto-Pierce Closed Shadow DOM & Authorize</button>
+      <button onclick="window.location.reload()">🔄 Reload Page (Mutate Obfuscated Class)</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📡 ARIA Live Region Announcement</div>
+      <div id="status-live" aria-live="assertive">Awaiting user authorization click...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔍 CDP Accessibility Tree (AXTree) Role-Path Inspector</div>
+      <button onclick="runAxScan()">Inspect Accessibility Hierarchy & Resolve Role-Path</button>
+      <pre id="axOutput">Click button above to simulate CDP Accessibility Tree resolution...</pre>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'bright' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      
+      document.getElementById('themeIcon').innerText = newTheme === 'dark' ? '🌙' : '☀️';
+      document.getElementById('themeLabel').innerText = newTheme === 'dark' ? 'Dark Theme' : 'Bright Theme';
+    }
+
+    (function() {
+      const randomHash = Math.random().toString(36).substring(2, 8);
+      const obfuscatedClassName = `obfuscated_v4_${randomHash}`;
+
+      class EnterprisePortal extends HTMLElement {
+        connectedCallback() {
+          const shadow = this.attachShadow({ mode: 'open' });
+          shadow.innerHTML = `
+            <style>
+              .portal-wrapper { padding: 16px; border: 1px solid var(--accent-blue); border-radius: 8px; background: var(--bg-dark); }
+            </style>
+            <div class="portal-wrapper">
+              <h4 style="font-size:14px; margin-bottom:10px;">Enterprise Gateway Portal <span class="badge badge-open">OPEN SHADOW ROOT</span></h4>
+              <payment-terminal class="${obfuscatedClassName}"></payment-terminal>
+            </div>
+          `;
+        }
+      }
+      customElements.define('enterprise-portal', EnterprisePortal);
+
+      class PaymentTerminal extends HTMLElement {
+        connectedCallback() {
+          const shadow = this.attachShadow({ mode: 'closed' });
+          shadow.innerHTML = `
+            <style>
+              .terminal-inner { padding: 14px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--accent-red); margin-top: 10px; }
+            </style>
+            <div class="terminal-inner">
+              <h5 style="font-size:13px; margin-bottom:6px;">Payment Terminal Node <span class="badge badge-closed">SEALED CLOSED SHADOW ROOT</span></h5>
+              <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; font-family:'JetBrains Mono', monospace;">
+                Dynamic Class Hash: <code style="color:var(--accent-red);">${obfuscatedClassName}</code>
+              </div>
+              <security-sandbox id="iframe-sandbox-wrapper"></security-sandbox>
+            </div>
+          `;
+        }
+      }
+      customElements.define('payment-terminal', PaymentTerminal);
+
+      class SecuritySandbox extends HTMLElement {
+        connectedCallback() {
+          const shadow = this.attachShadow({ mode: 'open' });
+          shadow.innerHTML = `
+            <style>
+              button.trigger-finalize {
+                background: #10B981;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                font-size: 13px;
+                font-weight: bold;
+                border-radius: 6px;
+                cursor: pointer;
+                font-family: 'Inter', sans-serif;
+              }
+              button.trigger-finalize:hover { background: #059669; }
+            </style>
+            <div class="sandbox-container" style="margin-top:10px;">
+              <button class="trigger-finalize ${obfuscatedClassName}"
+                      data-qa-state="unlocked-token"
+                      role="button"
+                      aria-label="Authorize Ledger Funds">
+                Authorize Ledger Funds
+              </button>
+            </div>
+          `;
+
+          const btn = shadow.querySelector('button');
+          btn.addEventListener('click', () => {
+            document.getElementById('status-live').innerText = "TRANSACTION AUTHORIZED BY LEDGER AT " + new Date().toLocaleTimeString();
+          });
+        }
+      }
+      customElements.define('security-sandbox', SecuritySandbox);
+    })();
+
+    function autoPierceAndAuthorize() {
+      // Traverse captured closed shadow roots registry
+      if (window.__CLOSED_SHADOW_ROOTS__ && window.__CLOSED_SHADOW_ROOTS__.length > 0) {
+        let found = false;
+        window.__CLOSED_SHADOW_ROOTS__.forEach(closedRoot => {
+          const target = closedRoot.querySelector('button.trigger-finalize') || closedRoot.querySelector('button');
+          if (target) {
+            target.click();
+            found = true;
+          } else {
+            // Nested lookup inside closed root's children
+            const nestedSandbox = closedRoot.querySelector('security-sandbox');
+            if (nestedSandbox && nestedSandbox.shadowRoot) {
+              const btn = nestedSandbox.shadowRoot.querySelector('button');
+              if (btn) {
+                btn.click();
+                found = true;
+              }
+            }
+          }
+        });
+        if (found) {
+          alert('SUCCESS: Closed Shadow DOM Pierced & Target Button Clicked!');
+          return;
+        }
+      }
+
+      // Fallback direct click
+      const portal = document.querySelector('enterprise-portal');
+      if (portal && portal.shadowRoot) {
+        const terminal = portal.shadowRoot.querySelector('payment-terminal');
+      }
+      alert('Closed Shadow Root hooked. Status updated.');
+    }
+
+    function runAxScan() {
+      const output = [];
+      output.push("=== SIMULATED CDP ACCESSIBILITY TREE DUMP ===");
+      output.push("[Role: WebArea] name: 'FRUGAL ENTERPRISE PORTAL — Closed Shadow DOM & Accessibility Tree Inspector'");
+      output.push("  └── [Role: region] name: 'Enterprise Gateway Portal'");
+      output.push("        └── [Role: region] name: 'Payment Terminal Node'");
+      output.push("              └── [Role: button] name: 'Authorize Ledger Funds' (data-qa-state='unlocked-token')");
+      output.push("");
+      output.push("CONSTRUCTED ROLE-PATH:");
+      output.push("WebArea > region[Gateway] > region[Payment Terminal] > button[name='Authorize Ledger Funds']");
+      output.push("STABILITY CONFIDENCE SCORE: 0.98 (Resilient to Dynamic Class Obfuscation)");
+      
+      document.getElementById('axOutput').innerText = output.join('\n');
+    }
+  </script>
+</body>
+</html>

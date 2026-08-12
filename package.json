@@ -1,0 +1,15 @@
+{
+  "name": "frugal-testing-ainative",
+  "version": "1.0.0",
+  "description": "Frugal Testing AI-Native SWE Intern Submission Repository",
+  "main": "q1_canvas_race/testbed/server.js",
+  "scripts": {
+    "start:q1": "node q1_canvas_race/testbed/server.js",
+    "start:q2": "node q2_crypto_replay/mock_gateway/server.js",
+    "start:q3": "node q3_shadow_dom/demo/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
