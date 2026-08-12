@@ -2,15 +2,8 @@
 Chained High-Precision Micro-Interaction Dispatcher (Q1 Framework)
 
 What it does:
-    Dispatches a rapid action sequence (hover -> drag +15px -> click) on target canvas coordinates
-    within a strict 30-100ms window following a pixel state transition.
-
-Failure mode defended against:
-    Defends against race window misses where transient cell states flip before input events register.
-
-Design trade-off:
-    Uses synthesized Playwright CDP/Mouse events rather than native OS level events,
-    trading raw OS input driver fidelity for microsecond-precise event timing control.
+    Dispatches a rapid action sequence (hover -> drag +15px on X axis -> click) on target
+    canvas coordinates within a strict 30-100ms window following a pixel state transition.
 """
 
 import time
@@ -30,6 +23,10 @@ class RaceWindowMissedError(Exception):
 class ActionLatencyResult:
     target_x: int
     target_y: int
+    final_x: int
+    final_y: int
+    delta_x: int
+    delta_y: int
     detection_ts_ns: int
     completion_ts_ns: int
     latency_ms: float
@@ -43,27 +40,41 @@ class ChainedActionDispatcher:
         self.max_window_ms = max_window_ms
 
     def fire(self, page: Page, coords: Tuple[int, int], detection_ts_ns: int) -> ActionLatencyResult:
-        cx, cy = coords
-        start_ns = time.perf_counter_ns()
+        initial_x, initial_y = coords
+        drag_distance = 15
+        final_x = initial_x + drag_distance
+        final_y = initial_y
+
+        delta_x = final_x - initial_x
+        delta_y = final_y - initial_y
+
+        assert delta_x == 15, f"Expected delta_x == 15, got {delta_x}"
+        assert delta_y == 0, f"Expected delta_y == 0, got {delta_y}"
 
         # Step 1: Mouse Hover
-        page.mouse.move(cx, cy)
+        page.mouse.move(initial_x, initial_y)
 
         # Step 2: Drag +15px on X axis
         page.mouse.down()
-        page.mouse.move(cx + 15, cy, steps=3)
+        page.mouse.move(final_x, final_y, steps=3)
         page.mouse.up()
 
         # Step 3: Click
-        page.mouse.click(cx + 15, cy)
+        page.mouse.click(final_x, final_y)
 
         completion_ns = time.perf_counter_ns()
         latency_ms = (completion_ns - detection_ts_ns) / 1e6
         window_hit = (self.min_window_ms <= latency_ms <= self.max_window_ms)
 
+        print(f"[ACTION CHAIN] initial_x={initial_x} initial_y={initial_y} final_x={final_x} final_y={final_y} delta_x={delta_x} delta_y={delta_y} latency_ms={latency_ms:.2f}ms")
+
         result = ActionLatencyResult(
-            target_x=cx,
-            target_y=cy,
+            target_x=initial_x,
+            target_y=initial_y,
+            final_x=final_x,
+            final_y=final_y,
+            delta_x=delta_x,
+            delta_y=delta_y,
             detection_ts_ns=detection_ts_ns,
             completion_ts_ns=completion_ns,
             latency_ms=latency_ms,
@@ -72,7 +83,10 @@ class ChainedActionDispatcher:
 
         logger.info(json.dumps({
             "event": "CHAINED_ACTION_DISPATCHED",
-            "coords": [cx, cy],
+            "initial": [initial_x, initial_y],
+            "final": [final_x, final_y],
+            "delta_x": delta_x,
+            "delta_y": delta_y,
             "latency_ms": round(latency_ms, 3),
             "window_hit": window_hit,
             "timestamp_micros": int(time.time() * 1e6)

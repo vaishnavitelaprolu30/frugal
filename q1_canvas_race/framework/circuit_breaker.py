@@ -4,14 +4,6 @@ Circuit Breaker & Resilience Engine (Q1 Framework)
 What it does:
     Monitors automation execution for failures (StaleFrameError, CoordinateDriftError, RepaintLagError)
     and manages state transitions (CLOSED -> OPEN -> HALF_OPEN) with automatic recalibration.
-
-Failure mode defended against:
-    Prevents cascading test failures and infinite retry loops caused by rendering lag
-    or canvas layout offset changes.
-
-Design trade-off:
-    Chooses proactive cool-down periods and coordinate re-calibration over naive immediate
-    retries, sacrificing execution speed in degraded states for long-term suite stability.
 """
 
 import json
@@ -83,9 +75,13 @@ class CircuitBreaker:
         except (StaleFrameError, CoordinateDriftError, RepaintLagError) as err:
             self.failure_count += 1
             self.last_failure_time = time.time()
+            
+            reason = type(err).__name__
+            print(f"[CIRCUIT BREAKER] reason={reason} action=ABORT_CURRENT_INTERACTION action=RECALIBRATE_CANVAS action=RETRY attempt={self.failure_count}")
+
             logger.warning(json.dumps({
                 "event": "CIRCUIT_BREAKER_FAILURE_CAPTURED",
-                "error_type": type(err).__name__,
+                "error_type": reason,
                 "error_msg": str(err),
                 "failure_count": self.failure_count,
                 "timestamp_micros": int(time.time() * 1e6)

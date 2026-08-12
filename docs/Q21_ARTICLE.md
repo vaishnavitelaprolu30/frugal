@@ -1,6 +1,6 @@
 # Securing the AI Workspace: Designing Restrictive MCP Sandboxes to Prevent Arbitrary Code Execution by Autonomous Developer Agents
 
-**Author:** Nandan Perumalla  
+**Author:** <YOUR_NAME>  
 **Published:** August 2026  
 **Category:** Software Engineering / AppSec / Model Context Protocol (MCP) Security  
 

@@ -1,7 +1,7 @@
 # Frugal Testing / BuildNexTech — AI-Native SWE Intern
 ## Master Implementation Plan + Antigravity Prompt Pack
 
-**Owner:** Nandan Perumalla · **Stack:** Python 3.11 + Playwright + Node/Express testbeds
+**Owner:** <YOUR_NAME> · **Stack:** Python 3.11 + Playwright + Node/Express testbeds
 **Window:** 32 hours · **Submission:** one unified PDF + 3 Drive folders + 1 video CV
 
 ---

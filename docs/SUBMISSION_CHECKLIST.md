@@ -1,6 +1,6 @@
 # Submission Compliance Verification Checklist
 
-**Candidate:** Nandan Perumalla · **Repository:** `frugal-testing-ainative`
+**Candidate:** <YOUR_NAME> · **Repository:** `frugal-testing-ainative`
 
 ---
 
@@ -8,7 +8,7 @@
 
 | # | Item | Status | Verification Detail |
 |---|---|---|---|
-| 1 | Single Unified PDF | READY | Named `Nandan_Perumalla_SRM_University_AP_<RollNumber>.pdf` |
+| 1 | Single Unified PDF | READY | Named `<YOUR_NAME>_<YOUR_COLLEGE>_<YOUR_ROLL_NUMBER>.pdf` |
 | 2 | Section 0 Declarations | COMPLETED | All 6 items completed in `docs/SECTION_B_ANSWERS.md` |
 | 3 | Section A Formatting | COMPLETED | Q1/Q2/Q3 laid out exactly per template structure |
 | 4 | Three Drive Folder Links | READY | Separate view-permission links per question |

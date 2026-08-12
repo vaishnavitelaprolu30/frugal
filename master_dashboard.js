@@ -121,7 +121,7 @@ app.get('/', (req, res) => {
       <div class="logo">F</div>
       <div>
         <div class="title">Frugal Testing AI-Native Execution Control Center</div>
-        <div class="subtitle">Candidate: Nandan Perumalla · Master Unified Suite & Evaluation Platform</div>
+        <div class="subtitle">Candidate: &lt;YOUR_NAME&gt; · Master Unified Suite & Evaluation Platform</div>
       </div>
     </div>
     <div>

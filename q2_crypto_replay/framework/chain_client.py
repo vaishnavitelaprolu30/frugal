@@ -3,14 +3,8 @@ HMAC Transaction Chain & Replay Client (Q2 Framework)
 
 What it does:
     Executes the multi-step transaction authorization workflow (POST challenge -> PUT signed payload)
-    and dispatches a subsequent duplicate request within a target <150ms window to test replay guards.
-
-Failure mode defended against:
-    Defends against transaction replay vulnerability (CWE-294) and unhandled header extraction errors.
-
-Design trade-off:
-    Uses synchronous HTTP execution with microsecond timer measurement over async connection pooling,
-    ensuring tight timing control during replay injection.
+    using the server-provided timestamp for HMAC-SHA512 generation, and dispatches a duplicate
+    replay request within a target <150ms window.
 """
 
 import time
@@ -51,18 +45,23 @@ class CryptoChainClient:
         resp = requests.post(f"{self.gateway_url}/v1/transactions")
         resp.raise_for_status()
 
-        # Extract tx_id specifically from response header X-Transaction-Id
         tx_id = resp.headers.get("X-Transaction-Id")
         if not tx_id:
             raise ValueError("Gateway response missing required 'X-Transaction-Id' header.")
 
         body = resp.json()
-        return TransactionChallenge(
+        challenge = TransactionChallenge(
             tx_id=tx_id,
             challenge_token=body["challengeToken"],
             server_timestamp_micros=body["serverTimestampMicros"],
             salt=body["salt"]
         )
+
+        print(f"[Q2] transaction_id={challenge.tx_id}")
+        print(f"[Q2] challenge_received={challenge.challenge_token[:16]}...")
+        print(f"[Q2] server_timestamp_micros={challenge.server_timestamp_micros}")
+
+        return challenge
 
     def execute_signed_put_and_replay(
         self,
@@ -70,9 +69,14 @@ class CryptoChainClient:
         payload_dict: Dict[str, Any]
     ) -> ReplayExecutionResult:
         """
-        Step 2 & 3: Sign payload, send PUT, then resend identical request within 150ms.
+        Step 2 & 3: Sign payload using server_timestamp_micros, send PUT, then resend identical request within 150ms.
         """
-        timestamp_micros = int(time.time() * 1e6)
+        # Q2-A: Explicitly use the server-provided timestamp in cryptographic signing flow
+        timestamp_micros = challenge.server_timestamp_micros
+
+        print(f"[Q2] signing_timestamp_source=SERVER")
+        print(f"[Q2] hmac_algorithm=HMAC-SHA512")
+
         mac = compute_hmac_signature(payload_dict, timestamp_micros, challenge.challenge_token, challenge.salt)
         raw_body = canonicalize_json(payload_dict)
 

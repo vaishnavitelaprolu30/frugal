@@ -1,6 +1,6 @@
 # Frugal Testing / BuildNexTech — AI-Native SWE Intern Submission
 
-**Candidate:** Nandan Perumalla · **Stack:** Python 3.11/3.12 + Playwright + Node.js 20 (Express + WS)  
+**Candidate:** <YOUR_NAME> · **Stack:** Python 3.11/3.12 + Playwright + Node.js 20 (Express + WS)  
 **Submission Repository:** `frugal-testing-ainative`
 
 ---

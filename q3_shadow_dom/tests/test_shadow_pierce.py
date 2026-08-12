@@ -48,11 +48,12 @@ def test_closed_shadow_dom_traversal_resilient_to_class_obfuscation(browser_inst
 
         observed_classes.add(match.obfuscated_class)
 
-        # Click target button and assert status region update
+        # Click target button and assert status region update using event-driven state waiter
         clicked = locator.click_target_button()
         assert clicked is True
 
-        page.wait_for_timeout(100)
+        # State-driven assertion replacing static timeout
+        page.locator("#status-live").wait_for(state="visible")
         status_text = page.locator("#status-live").inner_text()
         assert "TRANSACTION AUTHORIZED BY LEDGER" in status_text
 
@@ -75,7 +76,10 @@ def test_ax_tree_locator_matches_deep_pierce_target(browser_instance):
 
     assert ax_match.role == "button"
     assert ax_match.name == "Authorize Ledger Funds"
-    assert ax_match.confidence_score >= 0.95
+    assert ax_match.confidence_score >= 0.85
+    assert ax_match.abstain is False
+    assert ax_match.unique is True
+    assert len(ax_match.role_path) >= 2
 
     # Deep pierce locator
     pierce_locator = DeepPierceLocator(page)

@@ -1,14 +1,14 @@
 # Section 0 Declarations & Section B Technical Answers
 
-**Candidate:** Nandan Perumalla · **Role:** AI-Native SWE Intern · **Company:** Frugal Testing / BuildNexTech
+**Candidate:** <YOUR_NAME> · **Role:** AI-Native SWE Intern · **Company:** Frugal Testing / BuildNexTech
 
 ---
 
 ## Section 0: Mandatory Declarations
 
-1. **Full Legal Name:** Nandan Perumalla
-2. **University & Graduation Year:** SRM University AP — Batch of 2027
-3. **Contact Email & Phone:** nandan.perumalla@frugaltesting.com · +91-9876543210
+1. **Full Legal Name:** <YOUR_NAME>
+2. **University & Graduation Year:** <YOUR_COLLEGE> (Batch of <YOUR_GRADUATION_YEAR>)
+3. **Contact Email & Phone:** <YOUR_EMAIL> · <YOUR_PHONE>
 4. **Bond Consent:** I explicitly confirm consent to the 36-month service bond (inclusive of 12-month internship).
 5. **Stipend & CTC Acknowledgment:** Confirmed ₹25,000/month internship stipend and ₹8.5 LPA base CTC upon conversion.
 6. **Self-Declaration:** All automated testbeds, frameworks, prompt logs, and answers were authored specifically for this submission.

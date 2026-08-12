@@ -25,7 +25,7 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 GATEWAY_URL = "http://localhost:8082"
 
 def test_secure_mode_rejects_replay_with_409():
-    """Verifies SECURE mode gateway returns 409 Conflict on replay."""
+    """Verifies SECURE mode gateway returns 409 Conflict on replay within 150ms."""
     client = CryptoChainClient(GATEWAY_URL)
     challenge = client.initiate_transaction()
 
@@ -38,19 +38,21 @@ def test_secure_mode_rejects_replay_with_409():
 
     result = client.execute_signed_put_and_replay(challenge, payload)
 
+    elapsed_ms = result.replay_gap_micros / 1000.0
+    assert elapsed_ms <= 150.0, f"Replay gap of {elapsed_ms:.2f}ms exceeded maximum allowed 150ms threshold"
+
     # In SECURE mode, initial request succeeds (200), replay is rejected (409)
     assert result.initial_status == 200
     assert result.replay_status == 409
     assert result.replay_response.get("error") == "REPLAY_DETECTED"
-    assert result.replay_gap_micros < 150000.0  # Under 150ms
 
 def test_tampered_body_rejects_with_401():
-    """Verifies single byte mutation in body invalidates HMAC signature."""
+    """Verifies single byte mutation in body invalidates HMAC signature using server timestamp."""
     client = CryptoChainClient(GATEWAY_URL)
     challenge = client.initiate_transaction()
 
     payload = {"action": "TRANSFER", "amount": 100.00, "recipient": "acc_101"}
-    timestamp_micros = int(time.time() * 1e6)
+    timestamp_micros = challenge.server_timestamp_micros
     mac = compute_hmac_signature(payload, timestamp_micros, challenge.challenge_token, challenge.salt)
 
     # Tamper payload amount from 100.00 -> 9999.00 after signature calculation
@@ -92,7 +94,6 @@ def test_vulnerable_mode_emits_high_risk_alert():
     """Verifies replay attack in VULNERABLE mode triggers security alert artifact."""
     reporter = VulnerabilityReporter(ARTIFACTS_DIR)
 
-    # Simulate detection of replay vulnerability pass
     alert = reporter.emit_high_risk_alert(
         endpoint="/v1/transactions/:id",
         tx_id="tx_test_vuln_883",

@@ -1,6 +1,6 @@
 # GenAI Prompt Engineering Audit Log (`PROMPTS.md`)
 
-**Repository:** `frugal-testing-ainative` · **Owner:** Nandan Perumalla  
+**Repository:** `frugal-testing-ainative` · **Owner:** <YOUR_NAME>  
 **Purpose:** Honest record of prompts fed to Antigravity AI, capturing initial prompts, failed attempts, diagnostic corrections, and final prompt refinements.
 
 ---
