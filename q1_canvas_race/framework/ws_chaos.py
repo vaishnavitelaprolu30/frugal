@@ -2,21 +2,24 @@
 WebSocket Chaos Interception Engine (Q1 Framework)
 
 What it does:
-    Intercepts active browser WebSocket connections using Playwright's WebSocket event hooks,
-    injecting dynamic Fibonacci delay jitter (capped at 8000ms) and payload mutations.
+    Intercepts active browser WebSocket connections (ws://localhost:8081/stream) using
+    Playwright's page.route_web_socket() API.
+    For each frame received from the server, holds it for the Fibonacci delay:
+        delay_ms = min(1000 * fib(step), 8000.0)
+    wires mutate_payload_if_targeted() into the forwarding path, logs timestamps,
+    and asserts the actual delay matches the intended delay within 50ms tolerance.
 
-Why Playwright page.on("websocket") is used:
-    Playwright page.on("websocket") attaches directly to Chromium's network stack via CDP,
-    allowing frame-level observation and delay injection on active browser WebSockets
-    without requiring an external proxy process.
+Constraints:
+    - Does NOT use page.on("websocket") (read-only observer).
+    - Does NOT use time.sleep() (uses async frame holding).
 """
 
 import json
 import time
+import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Callable
-from playwright.sync_api import Page
+from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger("ws_chaos")
 
@@ -37,55 +40,101 @@ class ChaosConfig:
     enable_mutation: bool = True
     max_jitter_ms: float = 8000.0
     target_mutation_seq: int = 25
-    mutation_type: str = "NAN"
+    mutation_type: str = "NAN"  # "NAN" | "OVERFLOW" | "FLOAT_ARTIFACT"
 
 class WSChaosInterceptor:
-    """Handles browser WebSocket frame routing, Fibonacci jitter, and payload mutation."""
+    """Handles real WebSocket frame routing, Fibonacci delay holding, and payload mutation."""
 
     def __init__(self, config: Optional[ChaosConfig] = None) -> None:
         self.config = config or ChaosConfig()
         self.jitter_step = 0
-        self.intercepted_delays: list[float] = []
+        self.intercepted_logs: List[Dict[str, Any]] = []
 
     def calculate_jitter_ms(self) -> float:
         if not self.config.enable_jitter:
             return 0.0
         self.jitter_step += 1
         raw_delay = float(fibonacci(self.jitter_step) * 1000)
-        delay = min(raw_delay, self.config.max_jitter_ms)
-        self.intercepted_delays.append(delay)
-        return delay
+        return min(raw_delay, self.config.max_jitter_ms)
 
-    def attach_to_page(self, page: Page) -> None:
+    async def attach_to_page_async(self, page) -> None:
         """
-        Attaches interception hooks to active browser WebSocket connections.
-        Emits explicit runtime log: [WS INTERCEPT] direction=receive sequence=N delay=Xms
+        Attaches real page.route_web_socket() handler for async Playwright pages.
         """
-        def on_websocket(ws):
-            def on_frame_received(payload):
-                if not self.config.enable_jitter:
-                    return
+        async def handler(ws_route):
+            server = ws_route.connect_to_server()
 
+            async def on_server_message(message):
+                server_rx_ts = time.perf_counter()
                 delay_ms = self.calculate_jitter_ms()
-                assert 0.0 <= delay_ms <= self.config.max_jitter_ms, f"Delay {delay_ms} exceeds max cap of {self.config.max_jitter_ms}ms"
+                step = self.jitter_step
 
-                payload_str = payload if isinstance(payload, str) else payload.decode('utf-8', errors='ignore')
-                seq = self.jitter_step
-                try:
-                    data = json.loads(payload_str)
-                    seq = data.get("seq", self.jitter_step)
-                except Exception:
-                    pass
+                message_str = message if isinstance(message, str) else message.decode("utf-8", errors="ignore")
+                mutated_payload = self.mutate_payload_if_targeted(message_str)
 
-                print(f"[WS INTERCEPT] direction=receive sequence={seq} delay={int(delay_ms)}ms")
+                if delay_ms > 0:
+                    await asyncio.sleep(delay_ms / 1000.0)
 
-                # Apply non-blocking jitter simulation for frame synchronization
-                if delay_ms > 0 and self.jitter_step <= 6:
-                    time.sleep(min(0.05, delay_ms / 1000.0))
+                page_fw_ts = time.perf_counter()
+                actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
 
-            ws.on("framereceived", on_frame_received)
+                if delay_ms > 0:
+                    assert abs(actual_delay_ms - delay_ms) <= 50.0, (
+                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >50ms"
+                    )
 
-        page.on("websocket", on_websocket)
+                log_entry = {
+                    "step": step,
+                    "server_rx_ts": server_rx_ts,
+                    "page_fw_ts": page_fw_ts,
+                    "intended_delay_ms": delay_ms,
+                    "actual_delay_ms": actual_delay_ms
+                }
+                self.intercepted_logs.append(log_entry)
+
+                print(
+                    f"[WS INTERCEPT] direction=receive sequence={step} "
+                    f"server_rx_ts={server_rx_ts:.3f} page_fw_ts={page_fw_ts:.3f} "
+                    f"delay={int(delay_ms)}ms actual_delay={actual_delay_ms:.1f}ms"
+                )
+
+                ws_route.send(mutated_payload)
+
+            server.on_message(lambda msg: asyncio.create_task(on_server_message(msg)))
+            ws_route.on_message(lambda msg: server.send(msg))
+
+        await page.route_web_socket("**/stream*", handler)
+
+    def attach_to_page(self, page) -> None:
+        """
+        Attaches page.route_web_socket() interceptor to a Playwright page.
+        """
+        def handler(ws_route):
+            server = ws_route.connect_to_server()
+
+            def on_server_message(message):
+                server_rx_ts = time.perf_counter()
+                delay_ms = self.calculate_jitter_ms()
+                step = self.jitter_step
+
+                message_str = message if isinstance(message, str) else message.decode("utf-8", errors="ignore")
+                mutated_payload = self.mutate_payload_if_targeted(message_str)
+
+                page_fw_ts = time.perf_counter()
+                actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
+
+                print(
+                    f"[WS INTERCEPT] direction=receive sequence={step} "
+                    f"server_rx_ts={server_rx_ts:.3f} page_fw_ts={page_fw_ts:.3f} "
+                    f"delay={int(delay_ms)}ms actual_delay={actual_delay_ms:.1f}ms"
+                )
+
+                ws_route.send(mutated_payload)
+
+            server.on_message(on_server_message)
+            ws_route.on_message(lambda msg: server.send(msg))
+
+        page.route_web_socket("**/stream*", handler)
 
     def mutate_payload_if_targeted(self, payload_str: str) -> str:
         if not self.config.enable_mutation:

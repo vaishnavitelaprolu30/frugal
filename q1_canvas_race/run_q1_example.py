@@ -2,10 +2,10 @@
 Q1 Canvas Terminal Automation — Runnable Demonstration Script
 
 This script executes the complete Q1 pipeline against the live local testbed at http://localhost:8081:
-1. Dynamic Grid Calibration: Scans canvas pixels to compute grid cell centers.
+1. Dynamic Grid Calibration: Scans canvas pixels to derive grid cell centers from RGB color discontinuities.
 2. Real-Time Pixel State Transition Detection: Monitors cell state flip in rAF loop.
 3. High-Precision Chained Action Dispatch: Dispatches hover -> drag +15px -> click within 30-100ms.
-4. Error Boundary Verification: Injects corrupted payload and detects canvas ERR glyph.
+4. Error Boundary Verification: Injects corrupted payload and detects canvas ERR glyph using rAF observer.
 5. Artifact Generation: Writes timing CSV and full-page screenshots.
 """
 
@@ -17,7 +17,6 @@ from playwright.sync_api import sync_playwright
 
 from q1_canvas_race.framework.pixel_engine import PixelEngine
 from q1_canvas_race.framework.chained_actions import ChainedActionDispatcher
-from q1_canvas_race.framework.circuit_breaker import CircuitBreaker
 
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
 ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -48,14 +47,13 @@ def run_demonstration():
         pixel_engine = PixelEngine(page)
         grid_offsets = pixel_engine.calibrate()
         print(f"      Successfully calibrated {len(grid_offsets)} grid cell offsets:")
-        for cell_id in range(4):
+        for cell_id in range(min(4, len(grid_offsets))):
             print(f"      - Cell #{cell_id}: Center X={grid_offsets[cell_id][0]}, Y={grid_offsets[cell_id][1]}")
 
         # Step 3: Real-Time Pixel Transition Detection
         print("\n[3/5] Monitoring Cell #0 state transition (GRAY_LOADING -> ACTIVE)...")
         print("      Running requestAnimationFrame pixel inspection loop...")
 
-        start_time_ms = time.time() * 1000
         sample = pixel_engine.wait_for_cell_active(cell_id=0, timeout_ms=8000.0)
         detection_ts_ns = time.perf_counter_ns()
 
@@ -69,14 +67,14 @@ def run_demonstration():
         print("\n[4/5] Dispatching Micro-Interaction Action Chain:")
         print("      Sequence: Hover -> Mouse Drag +15px -> Click")
 
-        dispatcher = ChainedActionDispatcher(min_window_ms=0.0, max_window_ms=500.0)
+        dispatcher = ChainedActionDispatcher(min_window_ms=0.0, max_window_ms=100.0)
         action_result = dispatcher.fire(page, grid_offsets[0], detection_ts_ns)
 
         print(f"      - Target Coords: ({action_result.target_x}, {action_result.target_y})")
         print(f"      - Measured Execution Latency: {action_result.latency_ms:.2f} ms")
         print(f"      - Inside 30-100ms Race Window: {action_result.window_hit}")
 
-        # Step 5: Error Boundary Verification
+        # Step 5: Error Boundary Verification using rAF pixel state observer
         print("\n[5/5] Testing Canvas Error Boundary Handling...")
         print("      Injecting corrupted price payload (price = 1e+7 overflow)...")
 
@@ -97,15 +95,25 @@ def run_demonstration():
         }
         """
         page.evaluate(js_inject_corrupt)
-        page.wait_for_timeout(500)
 
-        # Inspect canvas top-right pixel region for ERR glyph (RGB high red component)
+        # State-driven rAF observer checking for red error glyph rendering
         glyph_pixel = page.evaluate("""
         () => {
-            const canvas = document.querySelector('#terminal');
-            const ctx = canvas.getContext('2d');
-            const img = ctx.getImageData(880, 25, 1, 1).data;
-            return [img[0], img[1], img[2]];
+            return new Promise((resolve) => {
+                function check() {
+                    const canvas = document.querySelector('#terminal');
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        const img = ctx.getImageData(880, 25, 1, 1).data;
+                        if (img[0] > 180) {
+                            resolve([img[0], img[1], img[2]]);
+                            return;
+                        }
+                    }
+                    requestAnimationFrame(check);
+                }
+                check();
+            });
         }
         """)
 
@@ -113,7 +121,6 @@ def run_demonstration():
         print(f"      - Error Glyph Region RGB: ({glyph_pixel[0]}, {glyph_pixel[1]}, {glyph_pixel[2]})")
         print(f"      - Red Error Banner & 'ERR' Glyph Rendered: {err_boundary_active}")
 
-        # Save Screenshot Artifact
         screenshot_path = ARTIFACTS_DIR / "demo_execution.png"
         page.screenshot(path=str(screenshot_path))
         print(f"\n[ARTIFACT] Saved full-page screenshot to:\n           {screenshot_path}")

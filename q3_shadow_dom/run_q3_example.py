@@ -61,9 +61,9 @@ def run_demonstration():
             observed_classes.add(match.obfuscated_class)
             print(f"      - Reload #{iter_num:02d}: Target Found! Tag='{match.tag_name}', Obfuscated Class='{match.obfuscated_class}'")
 
-            # Click target button inside sealed shadow DOM
+            # Click target button inside sealed shadow DOM & wait for ARIA status region update
             clicked = locator.click_target_button()
-            page.wait_for_timeout(50)
+            page.locator("#status-live").wait_for(state="visible")
 
             status_text = page.locator("#status-live").inner_text()
             assert "TRANSACTION AUTHORIZED" in status_text

@@ -3,22 +3,23 @@ Pixel Sampling & Dynamic Grid Calibration Engine (Q1 Framework)
 
 What it does:
     Injects a JavaScript requestAnimationFrame sampling engine into the target page
-    to derive canvas cell states directly from rendered pixel RGB values.
+    to derive canvas cell boundaries and center coordinates directly from rendered pixel RGB values.
 
 Failure mode defended against:
     Defends against DOM locator unreliability and visual layout drifts/resizes by sampling
-    actual rendered pixels at dynamically calibrated grid offsets.
+    actual rendered pixels and dynamically detecting RGB color discontinuities.
 
-Design trade-off:
-    Uses browser-injected JS canvas context inspection over server-side image diffing,
-    sacrificing cross-browser canvas backend uniformity for sub-frame execution speed.
+Requirements:
+    - Zero hardcoded startX/startY/cellW/cellH/gapX/gapY literals.
+    - Scans horizontal and vertical pixel lines in rAF loop until cell boundaries are detected.
+    - Returns derived grid coordinates and boundary metadata for inspectability.
 """
 
 import json
 import time
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 from playwright.sync_api import Page
 
 logger = logging.getLogger("pixel_engine")
@@ -33,46 +34,128 @@ class PixelSample:
     timestamp_ms: float
 
 class PixelEngine:
-    """Anti-AI pixel classification state machine and calibration engine."""
+    """Anti-AI pixel classification state machine and dynamic calibration engine."""
 
     def __init__(self, page: Page, canvas_selector: str = "#terminal") -> None:
         self.page = page
         self.canvas_selector = canvas_selector
         self.grid_offsets: Dict[int, Tuple[int, int]] = {}
+        self.detected_boundaries: Dict[str, Any] = {}
 
-    def calibrate(self) -> Dict[int, Tuple[int, int]]:
+    def calibrate(self, timeout_ms: float = 15000.0) -> Dict[int, Tuple[int, int]]:
         """
-        Executes a dynamic calibration scan across the canvas to locate
-        the center pixel coordinates of each cell in the 6x4 grid.
+        Executes a dynamic pixel calibration scan across the canvas in a rAF loop to derive
+        column and row boundaries from RGB color discontinuities, returning
+        derived cell centers and boundary metadata.
         """
         js_calibration = """
-        () => {
-            const canvas = document.querySelector('#terminal');
-            const ctx = canvas.getContext('2d');
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-
-            // Grid parameters matching render layout:
-            // startX = 60, startY = 120, cellW = 120, cellH = 100, gapX = 20, gapY = 20
-            const coords = {};
-            const startX = 60, startY = 120, cellW = 120, cellH = 100, gapX = 20, gapY = 20;
-
-            for (let row = 0; row < 4; row++) {
-                for (let col = 0; col < 6; col++) {
-                    const id = row * 6 + col;
-                    const centerX = startX + col * (cellW + gapX) + Math.floor(cellW / 2);
-                    const centerY = startY + row * (cellH + gapY) + Math.floor(cellH / 2);
-                    coords[id] = [centerX, centerY];
+        (timeoutMs) => {
+            return new Promise((resolve, reject) => {
+                const canvas = document.querySelector("#terminal") || document.querySelector("canvas");
+                if (!canvas) {
+                    reject(new Error("Canvas element not found"));
+                    return;
                 }
-            }
-            return coords;
+
+                const ctx = canvas.getContext("2d");
+                const w = canvas.width;
+                const h = canvas.height;
+                const startTime = performance.now();
+
+                function scan() {
+                    const imgData = ctx.getImageData(0, 0, w, h);
+                    const data = imgData.data;
+
+                    function getRGB(x, y) {
+                        const px = Math.min(Math.max(Math.floor(x), 0), w - 1);
+                        const py = Math.min(Math.max(Math.floor(y), 0), h - 1);
+                        const idx = (py * w + px) * 4;
+                        return [data[idx], data[idx + 1], data[idx + 2]];
+                    }
+
+                    const bg = getRGB(30, Math.min(170, Math.floor(h * 0.3)));
+
+                    function isCellPixel(x, y) {
+                        const [r, g, b] = getRGB(x, y);
+                        const dist = Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]);
+                        return dist > 35;
+                    }
+
+                    const rowStarts = [], rowEnds = [];
+                    let inCell = false;
+                    for (let y = Math.floor(h * 0.18); y < h; y++) {
+                        const cell = isCellPixel(Math.floor(w * 0.125), y);
+                        if (cell && !inCell) { inCell = true; rowStarts.push(y); }
+                        else if (!cell && inCell) { inCell = false; rowEnds.push(y); }
+                    }
+                    if (inCell) rowEnds.push(h);
+
+                    const rows = [];
+                    for (let i = 0; i < rowStarts.length; i++) {
+                        if (rowEnds[i] - rowStarts[i] >= 30) {
+                            rows.push([rowStarts[i], rowEnds[i]]);
+                        }
+                    }
+
+                    if (rows.length >= 1) {
+                        const scanY = Math.floor((rows[0][0] + rows[0][1]) / 2);
+                        const colStarts = [], colEnds = [];
+                        inCell = false;
+                        for (let x = 0; x < w; x++) {
+                            const cell = isCellPixel(x, scanY);
+                            if (cell && !inCell) { inCell = true; colStarts.push(x); }
+                            else if (!cell && inCell) { inCell = false; colEnds.push(x); }
+                        }
+                        if (inCell) colEnds.push(w);
+
+                        const cols = [];
+                        for (let i = 0; i < colStarts.length; i++) {
+                            if (colEnds[i] - colStarts[i] >= 30) {
+                                cols.push([colStarts[i], colEnds[i]]);
+                            }
+                        }
+
+                        if (cols.length >= 1) {
+                            const coords = {};
+                            for (let r = 0; r < rows.length; r++) {
+                                for (let c = 0; c < cols.length; c++) {
+                                    const id = r * cols.length + c;
+                                    const cx = Math.floor((cols[c][0] + cols[c][1]) / 2);
+                                    const cy = Math.floor((rows[r][0] + rows[r][1]) / 2);
+                                    coords[id] = [cx, cy];
+                                }
+                            }
+                            resolve({
+                                coords: coords,
+                                boundaries: { cols: cols, rows: rows }
+                            });
+                            return;
+                        }
+                    }
+
+                    if (performance.now() - startTime > timeoutMs) {
+                        reject(new Error("Calibration timeout waiting for grid rendering"));
+                        return;
+                    }
+
+                    requestAnimationFrame(scan);
+                }
+
+                requestAnimationFrame(scan);
+            });
         }
         """
-        raw_coords = self.page.evaluate(js_calibration)
+        res = self.page.evaluate(js_calibration, timeout_ms)
+        raw_coords = res.get("coords", {})
+        self.detected_boundaries = res.get("boundaries", {})
         self.grid_offsets = {int(k): (v[0], v[1]) for k, v in raw_coords.items()}
+
+        print(f"[PIXEL ENGINE CALIBRATED] derived_cells={len(self.grid_offsets)} cols={self.detected_boundaries.get('cols')} rows={self.detected_boundaries.get('rows')}")
+
         logger.info(json.dumps({
-            "event": "CALIBRATION_COMPLETED",
+            "event": "DYNAMIC_CALIBRATION_COMPLETED",
             "cells_calibrated": len(self.grid_offsets),
+            "boundaries": self.detected_boundaries,
             "timestamp_micros": int(time.time() * 1e6)
         }))
         return self.grid_offsets
@@ -83,7 +166,10 @@ class PixelEngine:
         Returns PixelSample upon transition detection.
         """
         if not self.grid_offsets:
-            self.calibrate()
+            self.calibrate(timeout_ms)
+
+        if cell_id not in self.grid_offsets:
+            self.calibrate(timeout_ms)
 
         cx, cy = self.grid_offsets[cell_id]
 
@@ -91,7 +177,7 @@ class PixelEngine:
         (args) => {
             const [cellId, cx, cy, timeout] = args;
             return new Promise((resolve, reject) => {
-                const canvas = document.querySelector('#terminal');
+                const canvas = document.querySelector('#terminal') || document.querySelector('canvas');
                 const ctx = canvas.getContext('2d');
                 const startTime = performance.now();
 
