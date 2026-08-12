@@ -103,3 +103,8 @@ test_corrupted_payload_boundary_disabled,1,0.0,0.0,PASSED
 test_circuit_breaker_recovers,0,0.0,0.0,PASSED
 test_chained_actions_race_window,0,0.0,0.0,PASSED
 test_circuit_breaker_recovers,0,0.0,0.0,PASSED
+test_pixel_state_transition_detected,0,4046.7,0.0,PASSED
+test_pixel_engine_dynamic_calibration_resize,0,0.0,0.0,PASSED
+test_corrupted_payload_boundary_disabled,1,0.0,0.0,PASSED
+test_circuit_breaker_recovers,0,0.0,0.0,PASSED
+test_chained_actions_race_window,0,0.0,0.01,PASSED

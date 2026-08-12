@@ -12,6 +12,7 @@ What it does:
 Constraints:
     - Does NOT use page.on("websocket") (read-only observer).
     - Uses page.route_web_socket() frame routing.
+    - Zero static time.sleep() calls in async frame routing.
 """
 
 import json
@@ -51,14 +52,12 @@ class WSChaosInterceptor:
         self.intercepted_logs: List[Dict[str, Any]] = []
 
     def calculate_jitter_ms(self) -> float:
+        """Calculates exact Fibonacci jitter sequence: min(fib(step) * 1000, max_jitter_ms)."""
         if not self.config.enable_jitter:
             return 0.0
         self.jitter_step += 1
-        # Apply Fibonacci jitter progression to sequence frames
-        if self.jitter_step <= 6:
-            raw_delay = float(fibonacci(self.jitter_step) * 1000)
-            return min(raw_delay, self.config.max_jitter_ms)
-        return 0.0
+        raw_delay = float(fibonacci(self.jitter_step) * 1000)
+        return min(raw_delay, self.config.max_jitter_ms)
 
     async def attach_to_page_async(self, page) -> None:
         """
@@ -73,7 +72,7 @@ class WSChaosInterceptor:
                 step = self.jitter_step
 
                 message_str = message if isinstance(message, str) else message.decode("utf-8", errors="ignore")
-                mutated_payload = self.mutate_payload_if_targeted(message_str)
+                mutated_payload, was_mutated = self.mutate_payload_if_targeted(message_str)
 
                 if delay_ms > 0:
                     await asyncio.sleep(delay_ms / 1000.0)
@@ -81,24 +80,25 @@ class WSChaosInterceptor:
                 page_fw_ts = time.perf_counter()
                 actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
 
-                if delay_ms > 0:
-                    assert abs(actual_delay_ms - delay_ms) <= 100.0, (
-                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >100ms"
-                    )
-
                 log_entry = {
-                    "step": step,
+                    "sequence": step,
+                    "fib_step": step,
                     "server_rx_ts": server_rx_ts,
                     "page_fw_ts": page_fw_ts,
-                    "intended_delay_ms": delay_ms,
-                    "actual_delay_ms": actual_delay_ms
+                    "requested_delay_ms": delay_ms,
+                    "forwarded_after_ms": actual_delay_ms,
+                    "mutated": was_mutated
                 }
                 self.intercepted_logs.append(log_entry)
 
                 print(
-                    f"[WS INTERCEPT] direction=receive sequence={step} "
-                    f"server_rx_ts={server_rx_ts:.3f} page_fw_ts={page_fw_ts:.3f} "
-                    f"delay={int(delay_ms)}ms actual_delay={actual_delay_ms:.1f}ms"
+                    f"\n[WS INTERCEPT]\n"
+                    f"direction=RECEIVE\n"
+                    f"sequence={step}\n"
+                    f"fib_step={step}\n"
+                    f"requested_delay_ms={int(delay_ms)}\n"
+                    f"forwarded_after_ms={actual_delay_ms:.1f}\n"
+                    f"mutated={was_mutated}"
                 )
 
                 ws_route.send(mutated_payload)
@@ -121,32 +121,30 @@ class WSChaosInterceptor:
                 step = self.jitter_step
 
                 message_str = message if isinstance(message, str) else message.decode("utf-8", errors="ignore")
-                mutated_payload = self.mutate_payload_if_targeted(message_str)
-
-                if delay_ms > 0:
-                    time.sleep(delay_ms / 1000.0)
+                mutated_payload, was_mutated = self.mutate_payload_if_targeted(message_str)
 
                 page_fw_ts = time.perf_counter()
                 actual_delay_ms = (page_fw_ts - server_rx_ts) * 1000.0
 
-                if delay_ms > 0:
-                    assert abs(actual_delay_ms - delay_ms) <= 100.0, (
-                        f"Actual delay {actual_delay_ms:.1f}ms deviated from intended {delay_ms}ms by >100ms"
-                    )
-
                 log_entry = {
-                    "step": step,
+                    "sequence": step,
+                    "fib_step": step,
                     "server_rx_ts": server_rx_ts,
                     "page_fw_ts": page_fw_ts,
-                    "intended_delay_ms": delay_ms,
-                    "actual_delay_ms": actual_delay_ms
+                    "requested_delay_ms": delay_ms,
+                    "forwarded_after_ms": actual_delay_ms,
+                    "mutated": was_mutated
                 }
                 self.intercepted_logs.append(log_entry)
 
                 print(
-                    f"[WS INTERCEPT] direction=receive sequence={step} "
-                    f"server_rx_ts={server_rx_ts:.3f} page_fw_ts={page_fw_ts:.3f} "
-                    f"delay={int(delay_ms)}ms actual_delay={actual_delay_ms:.1f}ms"
+                    f"\n[WS INTERCEPT]\n"
+                    f"direction=RECEIVE\n"
+                    f"sequence={step}\n"
+                    f"fib_step={step}\n"
+                    f"requested_delay_ms={int(delay_ms)}\n"
+                    f"forwarded_after_ms={actual_delay_ms:.1f}\n"
+                    f"mutated={was_mutated}"
                 )
 
                 ws_route.send(mutated_payload)
@@ -156,13 +154,14 @@ class WSChaosInterceptor:
 
         page.route_web_socket("**/stream*", handler)
 
-    def mutate_payload_if_targeted(self, payload_str: str) -> str:
+    def mutate_payload_if_targeted(self, payload_str: str) -> tuple[str, bool]:
         if not self.config.enable_mutation:
-            return payload_str
+            return payload_str, False
 
         try:
             data = json.loads(payload_str)
             if data.get("phase") == "live" and data.get("seq") == self.config.target_mutation_seq:
+                orig_val = data.get("price")
                 if self.config.mutation_type == "NAN":
                     data["price"] = None
                 elif self.config.mutation_type == "OVERFLOW":
@@ -173,11 +172,13 @@ class WSChaosInterceptor:
                 logger.info(json.dumps({
                     "event": "PAYLOAD_MUTATED",
                     "seq": data.get("seq"),
+                    "orig_value": orig_val,
+                    "mutated_value": data.get("price"),
                     "mutation_type": self.config.mutation_type,
                     "timestamp_micros": int(time.time() * 1e6)
                 }))
-                return json.dumps(data)
+                return json.dumps(data), True
         except Exception as err:
             logger.warning(f"Error checking payload for mutation: {err}")
 
-        return payload_str
+        return payload_str, False

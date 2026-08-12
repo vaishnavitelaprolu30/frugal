@@ -401,7 +401,7 @@ Three checkpoints per folder, or you're auto-filtered. Record **after** everythi
 2. **Source code (~2–3 min)** — IDE, scroll the full directory tree, then open each module and narrate *why*, not *what*. "This circuit breaker recalibrates grid offsets instead of retrying blindly, because a stale coordinate will fail identically forever."
 3. **GenAI prompt history (~90s)** — Antigravity chat / `PROMPTS.md`. Show a prompt that **failed** and how you diagnosed and corrected it. That single moment is the strongest signal you're steering the AI rather than the reverse.
 
-Recording tips: 1080p minimum, IDE font bumped to ~16pt so code is legible on a reviewer's laptop, mic test first, close notifications. Name files `Q1_Workflow_NandanPerumalla.mp4`.
+Recording tips: 1080p minimum, IDE font bumped to ~16pt so code is legible on a reviewer's laptop, mic test first, close notifications. Name files `Q1_Workflow_<YOUR_NAME>.mp4`.
 
 **Video CV (Q23, exactly 2–3 min)** — roughly 30s per prompt, scripted but not read aloud stiffly:
 - Q1 → the AI-native engineer's job has moved from producing code to **specifying, constraining, and verifying** it; the scarce skill is designing the oracle.
@@ -432,7 +432,7 @@ Recording tips: 1080p minimum, IDE font bumped to ~16pt so code is legible on a 
 
 Structural non-compliance is auto-filtered before a human reads a word. Verify every line.
 
-- [ ] Single unified PDF, named `Nandan_Perumalla_SRM_University_AP_<RollNumber>.pdf`
+- [ ] Single unified PDF, named `<YOUR_NAME>_<YOUR_COLLEGE>_<YOUR_ROLL_NUMBER>.pdf`
 - [ ] Section 0 answered — all 6 items, including explicit bond consent and stipend/CTC confirmation
 - [ ] Section A heading with Q1/Q2/Q3 laid out **exactly** as the template shows
 - [ ] Three separate Drive folder links (one per question — not one shared folder)

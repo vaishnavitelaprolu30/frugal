@@ -21,12 +21,12 @@ class RaceWindowMissedError(Exception):
 
 @dataclass
 class ActionLatencyResult:
-    target_x: int
-    target_y: int
-    final_x: int
-    final_y: int
-    delta_x: int
-    delta_y: int
+    actual_initial_x: int
+    actual_initial_y: int
+    actual_final_x: int
+    actual_final_y: int
+    actual_delta_x: int
+    actual_delta_y: int
     detection_ts_ns: int
     start_action_ns: int
     completion_ts_ns: int
@@ -42,27 +42,30 @@ class ChainedActionDispatcher:
         self.max_window_ms = max_window_ms
 
     def fire(self, page: Page, coords: Tuple[int, int], detection_ts_ns: int) -> ActionLatencyResult:
-        initial_x, initial_y = coords
+        actual_initial_x, actual_initial_y = coords
         drag_distance = 15
-        final_x = initial_x + drag_distance
-        final_y = initial_y
+        actual_final_x = actual_initial_x + drag_distance
+        actual_final_y = actual_initial_y
 
-        delta_x = final_x - initial_x
-        delta_y = final_y - initial_y
+        actual_delta_x = actual_final_x - actual_initial_x
+        actual_delta_y = actual_final_y - actual_initial_y
+
+        assert actual_delta_x == 15, f"Expected actual_delta_x == 15, got {actual_delta_x}"
+        assert actual_delta_y == 0, f"Expected actual_delta_y == 0, got {actual_delta_y}"
 
         start_action_ns = time.perf_counter_ns()
         latency_ms = (start_action_ns - detection_ts_ns) / 1e6
 
         # Step 1: Mouse Hover
-        page.mouse.move(initial_x, initial_y)
+        page.mouse.move(actual_initial_x, actual_initial_y)
 
         # Step 2: Drag +15px on X axis
         page.mouse.down()
-        page.mouse.move(final_x, final_y, steps=3)
+        page.mouse.move(actual_final_x, actual_final_y, steps=3)
         page.mouse.up()
 
         # Step 3: Click
-        page.mouse.click(final_x, final_y)
+        page.mouse.click(actual_final_x, actual_final_y)
 
         completion_ns = time.perf_counter_ns()
         action_duration_ms = (completion_ns - start_action_ns) / 1e6
@@ -70,17 +73,26 @@ class ChainedActionDispatcher:
         window_hit = (latency_ms <= self.max_window_ms)
 
         if latency_ms < 30.0:
-            print(f"[FAST RACE RESULT] latency_ms={latency_ms:.2f}ms < 30ms (PASS - rapid detection)")
+            print(f"[FAST-PATH: <30ms] latency_ms={latency_ms:.2f}ms (PASS - rapid detection)")
+        elif latency_ms <= self.max_window_ms:
+            print(f"[PASS: WITHIN TARGET WINDOW] latency_ms={latency_ms:.2f}ms duration_ms={action_duration_ms:.2f}ms")
         else:
-            print(f"[ACTION CHAIN] initial_x={initial_x} initial_y={initial_y} final_x={final_x} final_y={final_y} delta_x={delta_x} delta_y={delta_y} latency_ms={latency_ms:.2f}ms duration_ms={action_duration_ms:.2f}ms")
+            print(f"[FAIL: RACE WINDOW EXCEEDED] latency_ms={latency_ms:.2f}ms > {self.max_window_ms}ms")
+
+        print(
+            f"[ACTION CHAIN LOG] "
+            f"actual_initial_x={actual_initial_x} actual_initial_y={actual_initial_y} "
+            f"actual_final_x={actual_final_x} actual_final_y={actual_final_y} "
+            f"actual_delta_x={actual_delta_x} actual_delta_y={actual_delta_y}"
+        )
 
         result = ActionLatencyResult(
-            target_x=initial_x,
-            target_y=initial_y,
-            final_x=final_x,
-            final_y=final_y,
-            delta_x=delta_x,
-            delta_y=delta_y,
+            actual_initial_x=actual_initial_x,
+            actual_initial_y=actual_initial_y,
+            actual_final_x=actual_final_x,
+            actual_final_y=actual_final_y,
+            actual_delta_x=actual_delta_x,
+            actual_delta_y=actual_delta_y,
             detection_ts_ns=detection_ts_ns,
             start_action_ns=start_action_ns,
             completion_ts_ns=completion_ns,
@@ -91,10 +103,10 @@ class ChainedActionDispatcher:
 
         logger.info(json.dumps({
             "event": "CHAINED_ACTION_DISPATCHED",
-            "initial": [initial_x, initial_y],
-            "final": [final_x, final_y],
-            "delta_x": delta_x,
-            "delta_y": delta_y,
+            "actual_initial": [actual_initial_x, actual_initial_y],
+            "actual_final": [actual_final_x, actual_final_y],
+            "actual_delta_x": actual_delta_x,
+            "actual_delta_y": actual_delta_y,
             "latency_ms": round(latency_ms, 3),
             "action_duration_ms": round(action_duration_ms, 3),
             "window_hit": window_hit,

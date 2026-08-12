@@ -12,7 +12,7 @@ Failure mode defended against:
 Requirements:
     - Zero hardcoded startX/startY/cellW/cellH/gapX/gapY literals.
     - Scans horizontal and vertical pixel lines in rAF loop until cell boundaries are detected.
-    - Returns derived grid coordinates and boundary metadata for inspectability.
+    - Returns derived grid coordinates and structured boundary metadata (cols, rows, centers).
 """
 
 import json
@@ -33,6 +33,14 @@ class PixelSample:
     b: int
     timestamp_ms: float
 
+@dataclass
+class CalibrationDetails:
+    canvas_width: int
+    canvas_height: int
+    detected_cols: List[List[int]]
+    detected_rows: List[List[int]]
+    cell_centers: Dict[int, Tuple[int, int]]
+
 class PixelEngine:
     """Anti-AI pixel classification state machine and dynamic calibration engine."""
 
@@ -41,6 +49,7 @@ class PixelEngine:
         self.canvas_selector = canvas_selector
         self.grid_offsets: Dict[int, Tuple[int, int]] = {}
         self.detected_boundaries: Dict[str, Any] = {}
+        self.canvas_size: Tuple[int, int] = (0, 0)
 
     def calibrate(self, timeout_ms: float = 15000.0) -> Dict[int, Tuple[int, int]]:
         """
@@ -126,6 +135,8 @@ class PixelEngine:
                                 }
                             }
                             resolve({
+                                canvas_width: w,
+                                canvas_height: h,
                                 coords: coords,
                                 boundaries: { cols: cols, rows: rows }
                             });
@@ -148,17 +159,31 @@ class PixelEngine:
         res = self.page.evaluate(js_calibration, timeout_ms)
         raw_coords = res.get("coords", {})
         self.detected_boundaries = res.get("boundaries", {})
+        self.canvas_size = (res.get("canvas_width", 0), res.get("canvas_height", 0))
         self.grid_offsets = {int(k): (v[0], v[1]) for k, v in raw_coords.items()}
 
-        print(f"[PIXEL ENGINE CALIBRATED] derived_cells={len(self.grid_offsets)} cols={self.detected_boundaries.get('cols')} rows={self.detected_boundaries.get('rows')}")
+        print(f"[PIXEL ENGINE CALIBRATED] width={self.canvas_size[0]} height={self.canvas_size[1]} derived_cells={len(self.grid_offsets)} cols={self.detected_boundaries.get('cols')} rows={self.detected_boundaries.get('rows')}")
 
         logger.info(json.dumps({
             "event": "DYNAMIC_CALIBRATION_COMPLETED",
+            "canvas_width": self.canvas_size[0],
+            "canvas_height": self.canvas_size[1],
             "cells_calibrated": len(self.grid_offsets),
             "boundaries": self.detected_boundaries,
             "timestamp_micros": int(time.time() * 1e6)
         }))
         return self.grid_offsets
+
+    def get_calibration_details(self) -> CalibrationDetails:
+        if not self.grid_offsets:
+            self.calibrate()
+        return CalibrationDetails(
+            canvas_width=self.canvas_size[0],
+            canvas_height=self.canvas_size[1],
+            detected_cols=self.detected_boundaries.get("cols", []),
+            detected_rows=self.detected_boundaries.get("rows", []),
+            cell_centers=self.grid_offsets
+        )
 
     def wait_for_cell_active(self, cell_id: int, timeout_ms: float = 10000.0) -> PixelSample:
         """
