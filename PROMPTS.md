@@ -75,3 +75,27 @@ Ensure COT_SYSTEM_PROMPT.md explicitly forbids CSS selectors, element IDs, struc
 ### Prompt Strategy
 - Individual scenario questions (Q4–Q20) drafted one at a time, enforcing hard maximum of 150 words per response, concrete metrics, specific protocols, and explicit failure modes/trade-offs.
 - Q21 article drafted on Topic B (MCP Sandboxes) with complete threat model, rigid schema designs, `execve` argv execution wrapper, defense-in-depth, and trade-offs.
+
+---
+
+## 6. Phase 7: Q1 Test Timeout Debugging
+
+### Diagnostic Process
+- **Issue Discovered:** Test `test_pixel_state_transition_detected_under_fibonacci_jitter` hung indefinitely when upgrading from `sync_playwright` to `async_playwright` with 8000ms max jitter.
+- **Root Cause Analysis:** 
+  1. The 8000ms jitter caused the initial rendering grid to take ~8s to appear on the frontend.
+  2. The pixel calibration function `pixel_engine.calibrate()` and `wait_for_cell_active()` used a JS `Promise` with `requestAnimationFrame(scan)`. 
+  3. If Playwright in headless mode paused `requestAnimationFrame`, or if an exception was thrown inside the JS scanning logic (like an out-of-bounds `getImageData` due to initial zero-sized canvas), the `Promise` would never reject. 
+  4. The python-side `await page.evaluate` hung forever instead of timing out at 15s.
+- **Diagnostic Correction:**
+```javascript
+// Wrapped JS evaluate promises with a strict setTimeout for fail-safe rejection
+const failTimeout = setTimeout(() => {
+    isFinished = true;
+    reject(new Error("Calibration timeout waiting for grid rendering"));
+}, timeoutMs);
+
+// Wrapped rAF polling logic in a try/catch to suppress DOM exceptions on unrendered canvas
+try { ... } catch (err) { /* ignore and retry */ }
+```
+- **Outcome:** The JS code safely rejected on timeout. We then correctly expanded Python-side timeouts from `15000.0` to `25000.0` to accommodate the extreme 8000ms max jitter frame delays, resolving all hangs.

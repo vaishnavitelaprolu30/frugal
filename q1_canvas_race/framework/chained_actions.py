@@ -41,7 +41,7 @@ class ChainedActionDispatcher:
         self.min_window_ms = min_window_ms
         self.max_window_ms = max_window_ms
 
-    def fire(self, page: Page, coords: Tuple[int, int], detection_ts_ns: int) -> ActionLatencyResult:
+    async def fire(self, page: Page, coords: Tuple[int, int], detection_ts_ns: int) -> ActionLatencyResult:
         actual_initial_x, actual_initial_y = coords
         drag_distance = 15
         actual_final_x = actual_initial_x + drag_distance
@@ -57,15 +57,15 @@ class ChainedActionDispatcher:
         latency_ms = (start_action_ns - detection_ts_ns) / 1e6
 
         # Step 1: Mouse Hover
-        page.mouse.move(actual_initial_x, actual_initial_y)
+        await page.mouse.move(actual_initial_x, actual_initial_y)
 
         # Step 2: Drag +15px on X axis
-        page.mouse.down()
-        page.mouse.move(actual_final_x, actual_final_y, steps=3)
-        page.mouse.up()
+        await page.mouse.down()
+        await page.mouse.move(actual_final_x, actual_final_y, steps=3)
+        await page.mouse.up()
 
         # Step 3: Click
-        page.mouse.click(actual_final_x, actual_final_y)
+        await page.mouse.click(actual_final_x, actual_final_y)
 
         completion_ns = time.perf_counter_ns()
         action_duration_ms = (completion_ns - start_action_ns) / 1e6

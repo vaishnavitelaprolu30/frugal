@@ -126,6 +126,10 @@ PYTHONPATH=. pytest -v
 ### Q3 — Closed Shadow DOM Piercing & AX Tree (1 Point + CoT)
 - **Deep Shadow DOM Piercing**: Intercepts `attachShadow` via pre-load script hook into global registry.
 - **CDP AX Tree Locator**: Queries `Accessibility.getFullAXTree`, constructs parent pointers dynamically to generate role-paths up to `WebArea`, and derives dynamic confidence scores.
+- **`test_canvas_race.py`** – High-precision integration suite executing full UI-level race.
+   - Converts Playwright to **100% asynchronous execution** (`async_playwright`) to support non-blocking Fibonacci WebSocket holding.
+   - Injects the `WSChaosInterceptor` dynamically and verifies the chained action (hover -> drag -> click) executes in under 100ms.
+   - Evaluates real 8000ms max jitter.
 
 ---
 
